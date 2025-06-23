@@ -88,7 +88,7 @@ CURRENCY_SETTINGS = {
         inflation=0.03,
         spending_goal=45_000.0,
         income_tax=0.37,
-        capital_gains_tax=0.00,
+        capital_gains_tax=0.30,
     ),
     "USD": CurrencySettings(
         label="USD (United States)",
