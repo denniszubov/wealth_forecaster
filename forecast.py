@@ -47,6 +47,14 @@ ELASTICITY_DESCRIPTION = (
 )
 
 @dataclass
+class CareerPhase:
+    """Represents a phase in a person's career with specific income growth characteristics"""
+    start_age: int
+    end_age: int
+    growth_rate: float
+    description: str = ""
+
+@dataclass
 class FinancialInputs:
     # Core profile
     current_age: int
@@ -54,7 +62,6 @@ class FinancialInputs:
     current_gross_income: float
 
     # Growth & saving dynamics
-    annual_income_growth_rate: float
     base_savings_rate: float
     max_savings_rate: float
     savings_elasticity: float  # how quickly savings ramps toward max
@@ -72,6 +79,12 @@ class FinancialInputs:
     # Retirement target
     desired_annual_retirement_spending: float  # today‑dollar spending goal
     withdrawal_rate: float  # safe‑withdrawal %
+
+    # Replace annual_income_growth_rate with career_phases
+    career_phases: list[CareerPhase] 
+    
+    # Optional - maximum income ceiling
+    income_ceiling: float = float('inf')  # Natural ceiling for income growth
 
 
 # ---------- helper functions ----------
@@ -142,8 +155,17 @@ def build_projection(params: FinancialInputs):
         if age > MAX_AGE:
             break
 
-        # update income
-        income *= 1 + params.annual_income_growth_rate
+        # Update income with phase-based growth instead of constant growth
+        current_phase = next((p for p in params.career_phases if p.start_age <= age <= p.end_age), 
+                            CareerPhase(age, age, 0.0, "No phase defined"))
+        income *= (1 + current_phase.growth_rate)
+        
+        # Apply income ceiling if defined (income approaches but never exceeds ceiling)
+        if params.income_ceiling < float('inf'):
+            # Slow growth as we approach ceiling
+            proximity_factor = max(0, 1 - (income / params.income_ceiling))
+            income = min(income, params.income_ceiling * (1 - 0.05 * proximity_factor))
+        
         # dynamic savings rate
         save_rate = effective_savings_rate(
             params.base_savings_rate,
@@ -188,8 +210,36 @@ def app():
         current_income = st.number_input("Current Gross Income ($)", 0.0, step=1000.0, format=CURRENCY_FORMAT, value=DEFAULT_INCOME)
         st.caption("Annual salary + bonus before tax.")
 
-        income_growth = st.slider("Annual Income Growth (%)", 0.0, 15.0, DEFAULT_INCOME_GROWTH*100) / 100
-        st.caption("Average raise each year. 3 % doubles income in ~24 yr.")
+        st.header("Income Growth Model")
+        model_type = st.radio("Income Growth Model", ["Simple", "Career Phase"])
+        
+        if model_type == "Simple":
+            income_growth = st.slider("Annual Income Growth (%)", 0.0, 15.0, DEFAULT_INCOME_GROWTH*100) / 100
+            st.caption("Average raise each year. 3% doubles income in ~24 yr.")
+            career_phases = [CareerPhase(current_age, MAX_AGE, income_growth, "Constant Growth")]
+            income_ceiling = float('inf')
+        else:
+            st.write("Define growth rates for career phases:")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                early_career_growth = st.slider("Early Career Growth (%)", 0.0, 20.0, 7.0) / 100
+                mid_career_growth = st.slider("Mid Career Growth (%)", 0.0, 15.0, 4.0) / 100
+                late_career_growth = st.slider("Late Career Growth (%)", 0.0, 10.0, 2.0) / 100
+            
+            with col2:
+                early_end = st.number_input("Early Career Ends (age)", current_age + 1, 50, min(current_age + 10, 40))
+                mid_end = st.number_input("Mid Career Ends (age)", early_end + 1, 70, min(early_end + 15, 60))
+            
+            career_phases = [
+                CareerPhase(current_age, early_end, early_career_growth, "Early Career"),
+                CareerPhase(early_end + 1, mid_end, mid_career_growth, "Mid Career"),
+                CareerPhase(mid_end + 1, MAX_AGE, late_career_growth, "Late Career")
+            ]
+            
+            use_ceiling = st.checkbox("Apply Income Ceiling", value=False)
+            income_ceiling = st.number_input("Income Ceiling ($)", current_income * 1.5, 1000000.0, 250000.0, 10000.0) if use_ceiling else float('inf')
 
         st.header("Saving Behaviour")
         base_save = st.slider("Base Savings Rate (% of take‑home)", 0.0, 100.0, DEFAULT_BASE_SAVINGS_RATE*100) / 100
@@ -227,7 +277,6 @@ def app():
         current_age=current_age,
         current_net_worth=current_net_worth,
         current_gross_income=current_income,
-        annual_income_growth_rate=income_growth,
         base_savings_rate=base_save,
         max_savings_rate=max_save,
         savings_elasticity=elasticity,
@@ -239,6 +288,8 @@ def app():
         inflation_rate=inflation,
         desired_annual_retirement_spending=spend_goal,
         withdrawal_rate=withdrawal,
+        career_phases=career_phases,
+        income_ceiling=income_ceiling,
     )
 
     projection, details = build_projection(params)
@@ -258,8 +309,30 @@ def app():
 
     # ----- charts -----
     st.subheader("Income Growth vs Age")
-    st.line_chart(projection.set_index("Age")["Gross Income"], height=300)
-    
+    income_chart = st.line_chart(projection.set_index("Age")["Gross Income"], height=300)
+
+    # Display career phases if using the advanced model
+    if len(params.career_phases) > 1:  # More than one phase means we're using the advanced model
+        # Create a list to collect all rows
+        phase_rows = []
+        for phase in params.career_phases:
+            if phase.start_age <= MAX_AGE and phase.end_age >= params.current_age:
+                phase_range = range(max(phase.start_age, params.current_age), min(phase.end_age + 1, MAX_AGE + 1))
+                for age in phase_range:
+                    idx = age - params.current_age
+                    if idx < len(projection):
+                        phase_rows.append({
+                            "Age": age,
+                            "Phase": phase.description,
+                            "Growth Rate": f"{phase.growth_rate*100:.1f}%"
+                        })
+        
+        # Create DataFrame from the list of dictionaries
+        phase_df = pd.DataFrame(phase_rows)
+        
+        st.caption("Career Phases:")
+        st.dataframe(phase_df, hide_index=True, width=600)
+
     st.subheader("Savings Rate Progression")
     st.line_chart(projection.set_index("Age")["Effective Savings Rate"], height=300)
 
