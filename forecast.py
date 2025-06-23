@@ -9,31 +9,45 @@ import streamlit as st
 # ----------------------------
 MAX_AGE = 120  # simulation horizon if goal never reached
 
+@dataclass
+class CurrencySettings:
+    """Currency-specific financial settings and defaults"""
+    label: str
+    symbol: str
+    markdown_symbol: str
+    net_worth: float
+    income: float
+    income_growth: float
+    inflation: float
+    spending_goal: float
+    income_tax: float
+    capital_gains_tax: float
+
 CURRENCY_SETTINGS = {
-    "USD": {
-        "label": "USD (United States)",
-        "symbol": "$",
-        "markdown_symbol": "\\$",
-        "NET_WORTH": 0.0,
-        "INCOME": 60_000.0,
-        "INCOME_GROWTH": 0.03,  # 3 %
-        "INFLATION": 0.03,  # 3 %
-        "SPENDING_GOAL": 60_000.0,
-        "INCOME_TAX": 0.35,  # 35 %
-        "CAPITAL_GAINS_TAX": 0.20,  # 20 %
-    },
-    "ZAR": {
-        "label": "ZAR (South Africa)",
-        "symbol": "R",
-        "markdown_symbol": "R",
-        "NET_WORTH": 0.0,
-        "INCOME": 320_000.0,  # ≈ R26 600 / month
-        "INCOME_GROWTH": 0.04,  # 4 %
-        "INFLATION": 0.05,  # 5 %
-        "SPENDING_GOAL": 300_000.0,
-        "INCOME_TAX": 0.30,  # 30 %
-        "CAPITAL_GAINS_TAX": 0.18,  # ≈ 40 % inclusion × 45 % bracket
-    },
+    "USD": CurrencySettings(
+        label="USD (United States)",
+        symbol="$",
+        markdown_symbol="\\$",
+        net_worth=0.0,
+        income=60_000.0,
+        income_growth=0.03,  # 3 %
+        inflation=0.03,  # 3 %
+        spending_goal=60_000.0,
+        income_tax=0.35,  # 35 %
+        capital_gains_tax=0.20,  # 20 %
+    ),
+    "ZAR": CurrencySettings(
+        label="ZAR (South Africa)",
+        symbol="R",
+        markdown_symbol="R",
+        net_worth=0.0,
+        income=320_000.0,  # ≈ R26 600 / month
+        income_growth=0.04,  # 4 %
+        inflation=0.05,  # 5 %
+        spending_goal=300_000.0,
+        income_tax=0.30,  # 30 %
+        capital_gains_tax=0.18,  # ≈ 40 % inclusion × 45 % bracket
+    ),
 }
 
 # The remaining parameters seldom change by country, so we keep single defaults
@@ -242,17 +256,17 @@ def app():
         st.header("Global Settings")
         currency_key = st.selectbox(
             "Currency / Country",
-            [CURRENCY_SETTINGS[k]["label"] for k in CURRENCY_SETTINGS],
+            [CURRENCY_SETTINGS[k].label for k in CURRENCY_SETTINGS],
             index=0,
         )
 
     # Resolve key back from the label
     currency_code = next(
-        k for k, v in CURRENCY_SETTINGS.items() if v["label"] == currency_key
+        k for k, v in CURRENCY_SETTINGS.items() if v.label == currency_key
     )
     cur = CURRENCY_SETTINGS[currency_code]
-    symbol = cur["symbol"]
-    markdown_symbol = cur["markdown_symbol"]
+    symbol = cur.symbol
+    markdown_symbol = cur.markdown_symbol
 
     # ----- sidebar inputs -----
     with st.sidebar:
@@ -266,7 +280,7 @@ def app():
             0.0,
             step=1000.0,
             format=CURRENCY_FORMAT,
-            value=cur["NET_WORTH"],
+            value=cur.net_worth,
         )
         st.caption("Total assets minus debt — pretax.")
 
@@ -275,7 +289,7 @@ def app():
             0.0,
             step=1000.0,
             format=CURRENCY_FORMAT,
-            value=cur["INCOME"],
+            value=cur.income,
         )
         st.caption("Annual salary + bonus before tax.")
 
@@ -288,7 +302,7 @@ def app():
                     "Annual Income Growth (%)",
                     0.0,
                     15.0,
-                    cur["INCOME_GROWTH"] * 100,
+                    cur.income_growth * 100,
                 )
                 / 100
             )
@@ -365,13 +379,13 @@ def app():
 
         st.header("Taxes & Inflation")
         income_tax = (
-            st.slider("Marginal Income Tax (%)", 0.0, 50.0, cur["INCOME_TAX"] * 100) / 100
+            st.slider("Marginal Income Tax (%)", 0.0, 50.0, cur.income_tax * 100) / 100
         )
         cg_tax = (
-            st.slider("Capital‑Gains Tax (%)", 0.0, 40.0, cur["CAPITAL_GAINS_TAX"] * 100) / 100
+            st.slider("Capital‑Gains Tax (%)", 0.0, 40.0, cur.capital_gains_tax * 100) / 100
         )
         inflation = (
-            st.slider("Inflation (%)", 0.0, 10.0, cur["INFLATION"] * 100) / 100
+            st.slider("Inflation (%)", 0.0, 10.0, cur.inflation * 100) / 100
         )
 
         st.markdown("---")
@@ -381,7 +395,7 @@ def app():
             10_000.0,
             step=1_000.0,
             format=CURRENCY_FORMAT,
-            value=cur["SPENDING_GOAL"],
+            value=cur.spending_goal,
         )
         withdrawal = (
             st.slider("Withdrawal Rate (%)", 2.0, 10.0, DEFAULT_WITHDRAWAL_RATE * 100) / 100
