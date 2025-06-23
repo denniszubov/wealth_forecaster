@@ -475,8 +475,11 @@ def app():
     st.line_chart(projection.set_index("Age")["Net Worth"], height=300)
 
     st.subheader("Contributions vs Investment Gains")
+    chart_data = projection.set_index("Age")[["Annual Contributions", "Investment Gains"]]
     st.area_chart(
-        projection.set_index("Age")[["Annual Contributions", "Investment Gains"]], height=300
+        chart_data, 
+        height=300,
+        color=["#ff9933", "#3366ff"]  # Orange for contributions, blue for investment gains
     )
 
     # Detailed Table
