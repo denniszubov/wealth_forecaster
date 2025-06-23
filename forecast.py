@@ -6,6 +6,13 @@ import pandas as pd
 import streamlit as st
 
 
+st.set_page_config(
+    page_title="Wealth Forecast",
+    page_icon="📈",
+    layout="wide"
+)
+
+
 # ----------------------------
 # Constants & Default Settings
 # ----------------------------
@@ -276,7 +283,6 @@ def build_projection_cached(params: FinancialInputs):
 # Streamlit UI
 # ----------------------------
 def app():
-    st.set_page_config(page_title="Wealth Forecast", layout="wide")
     st.title("Wealth Forecast")
 
     # currency selector
