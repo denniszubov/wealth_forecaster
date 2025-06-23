@@ -484,14 +484,18 @@ def app():
     rounded = projection.copy()
 
     fmt_cols = ["Gross Income", "Annual Contributions", "Net Worth", "Investment Gains"]
-    rounded[fmt_cols] = (
-        symbol
-        + rounded[fmt_cols]
-        .round(0)
-        .astype(int)
-        .astype(str)
-        .str.replace(r"(\d)(?=(\d{3})+$)", r"\1,", regex=True)
-    )
+    
+    # Format each column individually
+    for col in fmt_cols:
+        rounded[col] = (
+            symbol
+            + rounded[col]
+            .round(0)
+            .astype(int)
+            .astype(str)
+            .str.replace(r"(\d)(?=(\d{3})+$)", r"\1,", regex=True)
+        )
+    
     rounded["Effective Savings Rate"] = (
         (rounded["Effective Savings Rate"] * 100)
         .round(1)
