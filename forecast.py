@@ -13,6 +13,7 @@ CURRENCY_SETTINGS = {
     "USD": {
         "label": "USD (United States)",
         "symbol": "$",
+        "markdown_symbol": "\\$",
         "NET_WORTH": 0.0,
         "INCOME": 60_000.0,
         "INCOME_GROWTH": 0.03,  # 3 %
@@ -24,6 +25,7 @@ CURRENCY_SETTINGS = {
     "ZAR": {
         "label": "ZAR (South Africa)",
         "symbol": "R",
+        "markdown_symbol": "R",
         "NET_WORTH": 0.0,
         "INCOME": 320_000.0,  # ≈ R26 600 / month
         "INCOME_GROWTH": 0.04,  # 4 %
@@ -57,11 +59,12 @@ YEARLY_COLUMNS = [
 ]
 
 ELASTICITY_DESCRIPTION = (
-    "**Savings elasticity** controls how fast your savings‑rate glide path rises from the *base* toward the *max* as your income grows."
-    "\n• **0.3 – Slow burner:** Halfway to max after ~90 % pay growth."
-    "\n• **1.0 – Balanced (default):** Halfway after ~40 % pay bump."
-    "\n• **2.0 – Turbo:** Halfway once income is ~20 % above today." 
-    "\nPick a smaller value if expenses rise with income; larger if raises go mostly to savings."
+    "**Savings elasticity** controls how fast your savings-rate glide path "
+    "rises from the *base* toward the *max* as your income grows.\n\n"
+    "- **0.3 – Slow burner:** Halfway to max after ~90 % pay growth.\n"
+    "- **1.0 – Balanced (default):** Halfway after ~40 % pay bump.\n"
+    "- **2.0 – Turbo:** Halfway once income is ~20 % above today.\n\n"
+    "Pick a smaller value if expenses rise with income; larger if raises go mostly to savings."
 )
 
 
@@ -249,6 +252,7 @@ def app():
     )
     cur = CURRENCY_SETTINGS[currency_code]
     symbol = cur["symbol"]
+    markdown_symbol = cur["markdown_symbol"]
 
     # ----- sidebar inputs -----
     with st.sidebar:
@@ -417,7 +421,7 @@ def app():
 
     if details["age"] is not None:
         st.info(
-            f"At age **{details['age']}**, portfolio target is **{symbol}{details['required_capital']:,.0f}**, providing **{symbol}{details['spending_nominal']:,.0f}** per year in that year's currency."
+            f"At age **{details['age']}**, portfolio target is **{markdown_symbol}{details['required_capital']:,.0f}**, providing **{markdown_symbol}{details['spending_nominal']:,.0f}** per year in that year's currency."
         )
 
     # Charts
