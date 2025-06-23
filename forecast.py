@@ -245,7 +245,15 @@ def app():
         base_save = st.slider("Base Savings Rate (% of take‑home)", 0.0, 100.0, DEFAULT_BASE_SAVINGS_RATE*100) / 100
         st.caption("Minimum savings rate today.")
 
-        max_save = st.slider("Max Savings Rate (%)", int(base_save * 100), 100, int(DEFAULT_MAX_SAVINGS_RATE*100)) / 100
+        # Fix: Make max_save more independent from base_save
+        initial_max_save_value = max(DEFAULT_MAX_SAVINGS_RATE*100, base_save*100)
+        max_save = st.slider("Max Savings Rate (%)", 0.0, 100.0, initial_max_save_value) / 100
+        
+        # Add validation to ensure max_save >= base_save
+        if max_save < base_save:
+            st.warning("Max savings rate cannot be lower than base savings rate. Adjusting to match.")
+            max_save = base_save
+            
         st.caption("Upper‑limit savings rate once income is high.")
 
         elasticity = st.slider(
@@ -308,7 +316,7 @@ def app():
         )
 
     # ----- charts -----
-    st.subheader("Income Growth vs Age")
+    st.subheader("Gross Income vs Age")
     income_chart = st.line_chart(projection.set_index("Age")["Gross Income"], height=300)
 
     # Display career phases if using the advanced model
