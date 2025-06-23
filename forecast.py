@@ -4,7 +4,29 @@ from dataclasses import dataclass
 import pandas as pd
 import streamlit as st
 
+# Constants
 MAX_AGE = 120  # simulation horizon if goal never reached
+
+# Default values
+DEFAULT_AGE = 30
+DEFAULT_NET_WORTH = 0.0
+DEFAULT_INCOME = 60000.0
+DEFAULT_INCOME_GROWTH = 0.03  # 3%
+DEFAULT_BASE_SAVINGS_RATE = 0.20  # 20%
+DEFAULT_MAX_SAVINGS_RATE = 0.50  # 50%
+DEFAULT_SAVINGS_ELASTICITY = 1.0
+DEFAULT_EMPLOYER_MATCH = 0.0  # 0%
+DEFAULT_EMPLOYER_MATCH_CAP = 0.0  # 0%
+DEFAULT_ANNUAL_RETURN = 0.09  # 9%
+DEFAULT_INCOME_TAX = 0.35  # 30%
+DEFAULT_CAPITAL_GAINS_TAX = 0.20  # 20%
+DEFAULT_INFLATION = 0.03  # 3%
+DEFAULT_SPENDING_GOAL = 60000.0
+DEFAULT_WITHDRAWAL_RATE = 0.04  # 4%
+
+# UI formatting
+PERCENTAGE_FORMAT = "%.1f"
+CURRENCY_FORMAT = "%.0f"
 
 YEARLY_COLUMNS = [
     "Age",
@@ -15,6 +37,14 @@ YEARLY_COLUMNS = [
     "Investment Gains",
 ]
 
+# Savings elasticity descriptions
+ELASTICITY_DESCRIPTION = (
+    "**Savings elasticity** controls how fast your savings‑rate glide path rises from the *base* toward the *max* as your income grows."
+    "\n• **0.3 – Slow burner:** Halfway to max after ~90 % pay growth."
+    "\n• **1.0 – Balanced (default):** Halfway after ~40 % pay bump."
+    "\n• **2.0 – Turbo:** Halfway once income is ~20 % above today." 
+    "\nPick a smaller value if expenses rise with income; larger if raises go mostly to savings."
+)
 
 @dataclass
 class FinancialInputs:
@@ -149,55 +179,48 @@ def app():
     # ----- sidebar inputs -----
     with st.sidebar:
         st.header("Profile & Income")
-        current_age = st.number_input("Current Age", 18, 80, 23, step=1)
+        current_age = st.number_input("Current Age", 18, 80, DEFAULT_AGE, step=1)
         st.caption("Your age today. Starting point for the simulation.")
 
-        current_net_worth = st.number_input("Current Net Worth ($)", 0.0, step=1000.0, format="%.0f")
+        current_net_worth = st.number_input("Current Net Worth ($)", 0.0, step=1000.0, format=CURRENCY_FORMAT, value=DEFAULT_NET_WORTH)
         st.caption("Total assets minus debt — pretax dollars.")
 
-        current_income = st.number_input("Current Gross Income ($)", 0.0, step=1000.0, format="%.0f", value=60000.0)
+        current_income = st.number_input("Current Gross Income ($)", 0.0, step=1000.0, format=CURRENCY_FORMAT, value=DEFAULT_INCOME)
         st.caption("Annual salary + bonus before tax.")
 
-        income_growth = st.slider("Annual Income Growth (%)", 0.0, 15.0, 3.0) / 100
-        st.caption("Average raise each year. 3 % doubles income in ~24 yr.")
+        income_growth = st.slider("Annual Income Growth (%)", 0.0, 15.0, DEFAULT_INCOME_GROWTH*100) / 100
+        st.caption("Average raise each year. 3 % doubles income in ~24 yr.")
 
         st.header("Saving Behaviour")
-        base_save = st.slider("Base Savings Rate (% of take‑home)", 0.0, 100.0, 20.0) / 100
+        base_save = st.slider("Base Savings Rate (% of take‑home)", 0.0, 100.0, DEFAULT_BASE_SAVINGS_RATE*100) / 100
         st.caption("Minimum savings rate today.")
 
-        max_save = st.slider("Max Savings Rate (%)", int(base_save * 100), 100) / 100
+        max_save = st.slider("Max Savings Rate (%)", int(base_save * 100), 100, int(DEFAULT_MAX_SAVINGS_RATE*100)) / 100
         st.caption("Upper‑limit savings rate once income is high.")
 
         elasticity = st.slider(
             "Savings Elasticity (rate ramp speed)",
             0.1,
             3.0,
-            1.0,
+            DEFAULT_SAVINGS_ELASTICITY,
             0.1,
         )
-        st.caption(
-            "**Savings elasticity** controls how fast your savings‑rate glide path rises from the *base* toward the *max* as your income grows."
-            "\n• **0.3 – Slow burner:** Halfway to max after ~90 % pay growth."
-            "\n• **1.0 – Balanced (default):** Halfway after ~40 % pay bump."
-            "\n• **2.0 – Turbo:** Halfway once income is ~20 % above today." 
-            "\nPick a smaller value if expenses rise with income; larger if raises go mostly to savings."
-        )
-        st.caption("How quickly savings rate ramps. 0.5 = gentle, 2 = aggressive.")
+        st.caption(ELASTICITY_DESCRIPTION)
 
         st.header("Employer & Returns")
-        employer_match_rate = st.slider("Employer Match (%)", 0.0, 100.0, 0.0) / 100
-        employer_match_cap = st.slider("Match Cap (% of income)", 0.0, 100.0, 0.0) / 100
-        expected_return = st.slider("Expected Annual Return (%)", -5.0, 15.0, 7.0) / 100
+        employer_match_rate = st.slider("Employer Match (%)", 0.0, 100.0, DEFAULT_EMPLOYER_MATCH*100) / 100
+        employer_match_cap = st.slider("Match Cap (% of income)", 0.0, 100.0, DEFAULT_EMPLOYER_MATCH_CAP*100) / 100
+        expected_return = st.slider("Expected Annual Return (%)", -5.0, 15.0, DEFAULT_ANNUAL_RETURN*100) / 100
 
         st.header("Taxes & Inflation")
-        income_tax = st.slider("Marginal Income Tax (%)", 0.0, 50.0, 30.0) / 100
-        cg_tax = st.slider("Capital‑Gains Tax (%)", 0.0, 40.0, 20.0) / 100
-        inflation = st.slider("Inflation (%)", 0.0, 10.0, 3.0) / 100
+        income_tax = st.slider("Marginal Income Tax (%)", 0.0, 50.0, DEFAULT_INCOME_TAX*100) / 100
+        cg_tax = st.slider("Capital‑Gains Tax (%)", 0.0, 40.0, DEFAULT_CAPITAL_GAINS_TAX*100) / 100
+        inflation = st.slider("Inflation (%)", 0.0, 10.0, DEFAULT_INFLATION*100) / 100
 
         st.markdown("---")
         st.subheader("Retirement Goal")
-        spend_goal = st.number_input("Desired Annual Spending (today $)", 10000.0, step=1000.0, format="%.0f", value=60000.0)
-        withdrawal = st.slider("Withdrawal Rate (%)", 2.0, 10.0, 4.0) / 100
+        spend_goal = st.number_input("Desired Annual Spending (today $)", 10000.0, step=1000.0, format=CURRENCY_FORMAT, value=DEFAULT_SPENDING_GOAL)
+        withdrawal = st.slider("Withdrawal Rate (%)", 2.0, 10.0, DEFAULT_WITHDRAWAL_RATE*100) / 100
 
     # build params
     params = FinancialInputs(
@@ -236,10 +259,13 @@ def app():
     # ----- charts -----
     st.subheader("Income Growth vs Age")
     st.line_chart(projection.set_index("Age")["Gross Income"], height=300)
+    
+    st.subheader("Savings Rate Progression")
+    st.line_chart(projection.set_index("Age")["Effective Savings Rate"], height=300)
 
     st.subheader("Net Worth Projection")
     st.line_chart(projection.set_index("Age")["Net Worth"], height=300)
-
+    
     st.subheader("Contributions vs Investment Gains")
     st.area_chart(
         projection.set_index("Age")[["Annual Contributions", "Investment Gains"]], height=300
