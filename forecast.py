@@ -1,189 +1,267 @@
-import streamlit as st
+import math
 from dataclasses import dataclass
-import pandas as pd
 
-MAX_AGE = 120  # fallback horizon if goal never reached
+import pandas as pd
+import streamlit as st
+
+MAX_AGE = 120  # simulation horizon if goal never reached
+
+YEARLY_COLUMNS = [
+    "Age",
+    "Gross Income",
+    "Effective Savings Rate",
+    "Annual Contributions",
+    "Net Worth",
+    "Investment Gains",
+]
+
 
 @dataclass
 class FinancialInputs:
+    # Core profile
     current_age: int
     current_net_worth: float
     current_gross_income: float
+
+    # Growth & saving dynamics
     annual_income_growth_rate: float
-    savings_rate: float
+    base_savings_rate: float
+    max_savings_rate: float
+    savings_elasticity: float  # how quickly savings ramps toward max
+
+    # Employer + market
     employer_match_rate: float
     employer_match_cap: float
     expected_annual_return_rate: float
+
+    # Taxes & inflation
     income_tax_rate: float
     capital_gains_tax_rate: float
     inflation_rate: float
-    desired_annual_retirement_spending: float  # today’s dollars
-    withdrawal_rate: float  # decimal
+
+    # Retirement target
+    desired_annual_retirement_spending: float  # today‑dollar spending goal
+    withdrawal_rate: float  # safe‑withdrawal %
 
 
-def build_projection(params: FinancialInputs) -> tuple[pd.DataFrame, dict]:
-    """Simulate year-by-year until target portfolio is met or MAX_AGE."""
-    ages: list[int] = []
-    net_worth_list: list[float] = []
-    contributions_list: list[float] = []
-    gains_list: list[float] = []
+# ---------- helper functions ----------
+
+def effective_savings_rate(
+    base: float,
+    max_rate: float,
+    elasticity: float,
+    income_now: float,
+    income_base: float,
+) -> float:
+    """Smoothly increase savings rate toward max as income rises."""
+    growth_factor = (income_now / income_base) - 1  # 0 when income == base
+    rate = base + (max_rate - base) * (1 - math.exp(-elasticity * growth_factor))
+    return min(rate, max_rate)
+
+
+# ---------- projection engine ----------
+
+def build_projection(params: FinancialInputs):
+    rows: list[list[float]] = []
 
     age = params.current_age
-    gross_income = params.current_gross_income
+    income = params.current_gross_income
+    income_base = income  # reference point for savings‑rate ramp
+
     net_worth = params.current_net_worth
     after_tax_return = params.expected_annual_return_rate * (1 - params.capital_gains_tax_rate)
 
-    initial_net_worth = net_worth
     cumulative_contributions = 0.0
+    initial_net_worth = net_worth
+    annual_contribution = 0.0  # first year placeholder
 
-    target_age: int | None = None
-    target_capital: float | None = None
-    target_spending_nominal: float | None = None
+    target_age = None
+    target_capital = None
+    target_spending_nominal = None
 
     while age <= MAX_AGE:
-        # Calculate this year's required capital (inflation-adjusted spending / withdrawal)
-        years_from_now = age - params.current_age
-        spending_nominal = params.desired_annual_retirement_spending * (
-            1 + params.inflation_rate
-        ) ** years_from_now
+        years_from_start = age - params.current_age
+        spending_nominal = params.desired_annual_retirement_spending * (1 + params.inflation_rate) ** years_from_start
         required_capital = spending_nominal / params.withdrawal_rate
 
-        ages.append(age)
-        net_worth_list.append(net_worth)
-        contributions_list.append(0.0 if age == params.current_age else annual_contribution)  # type: ignore[name-defined]
-        gains_list.append(net_worth - initial_net_worth - cumulative_contributions)
+        # --- record current year ---
+        rows.append(
+            [
+                age,
+                income,
+                effective_savings_rate(
+                    params.base_savings_rate,
+                    params.max_savings_rate,
+                    params.savings_elasticity,
+                    income,
+                    income_base,
+                ),
+                annual_contribution,
+                net_worth,
+                net_worth - initial_net_worth - cumulative_contributions,
+            ]
+        )
 
-        # Check if goal reached this year (post-growth and contributions from previous year)
+        # Check if goal hit after updating previous year
         if net_worth >= required_capital and target_age is None:
-            target_age = age
-            target_capital = required_capital
-            target_spending_nominal = spending_nominal
-            break  # stop projection once goal reached
+            target_age, target_capital, target_spending_nominal = age, required_capital, spending_nominal
+            break
 
         # --- advance to next year ---
         age += 1
         if age > MAX_AGE:
             break
 
-        # Grow income
-        gross_income *= 1 + params.annual_income_growth_rate
-        # Contributions
-        after_tax_income = gross_income * (1 - params.income_tax_rate)
-        eligible_match_base = min(params.employer_match_cap, params.savings_rate) * gross_income
-        annual_contribution = params.savings_rate * after_tax_income + params.employer_match_rate * eligible_match_base
-        # Market return, then add contribution
+        # update income
+        income *= 1 + params.annual_income_growth_rate
+        # dynamic savings rate
+        save_rate = effective_savings_rate(
+            params.base_savings_rate,
+            params.max_savings_rate,
+            params.savings_elasticity,
+            income,
+            income_base,
+        )
+        # contributions
+        after_tax_income = income * (1 - params.income_tax_rate)
+        eligible_match_base = min(params.employer_match_cap, save_rate) * income
+        annual_contribution = save_rate * after_tax_income + params.employer_match_rate * eligible_match_base
+
+        # portfolio growth
         net_worth *= 1 + after_tax_return
         net_worth += annual_contribution
         cumulative_contributions += annual_contribution
 
-    # If not reached, final required_capital from last loop iteration
-    if target_age is None:
-        target_age = None
-        target_capital = required_capital  # type: ignore
-        target_spending_nominal = None
-
-    projection_df = pd.DataFrame(
-        {
-            "Age": ages,
-            "Net Worth": net_worth_list,
-            "Annual Contributions": contributions_list,
-            "Investment Gains": gains_list,
-        }
-    )
-
-    details = {
+    df = pd.DataFrame(rows, columns=YEARLY_COLUMNS)
+    return df, {
         "age": target_age,
         "required_capital": target_capital,
         "spending_nominal": target_spending_nominal,
     }
-    return projection_df, details
 
+
+# ---------- streamlit UI ----------
 
 def app():
     st.set_page_config(page_title="Wealth Forecast", layout="wide")
     st.title("Wealth Forecast")
 
-    # ----- SIDEBAR INPUTS -----
+    # ----- sidebar inputs -----
     with st.sidebar:
         st.header("Profile & Income")
         current_age = st.number_input("Current Age", 18, 80, 23, step=1)
-        current_net_worth = st.number_input("Current Net Worth ($)", 0.0, step=1000.0, format="%.0f")
-        current_gross_income = st.number_input("Current Gross Income ($)", 0.0, step=1000.0, format="%.0f", value=60000.0)
-        annual_income_growth_rate = st.slider("Annual Income Growth (%)", 0.0, 15.0, 3.0) / 100
+        st.caption("Your age today. Starting point for the simulation.")
 
-        st.header("Saving & Investing")
-        savings_rate = st.slider("Savings Rate (% of after-tax income)", 0.0, 100.0, 20.0) / 100
-        employer_match_rate = st.slider("Employer Match Rate (%)", 0.0, 100.0, 0.0) / 100
-        employer_match_cap = st.slider("Employer Match Cap (% of income)", 0.0, 100.0, 0.0) / 100
-        expected_annual_return_rate = st.slider("Expected Annual Return (%)", -5.0, 15.0, 7.0) / 100
+        current_net_worth = st.number_input("Current Net Worth ($)", 0.0, step=1000.0, format="%.0f")
+        st.caption("Total assets minus debt — pretax dollars.")
+
+        current_income = st.number_input("Current Gross Income ($)", 0.0, step=1000.0, format="%.0f", value=60000.0)
+        st.caption("Annual salary + bonus before tax.")
+
+        income_growth = st.slider("Annual Income Growth (%)", 0.0, 15.0, 3.0) / 100
+        st.caption("Average raise each year. 3 % doubles income in ~24 yr.")
+
+        st.header("Saving Behaviour")
+        base_save = st.slider("Base Savings Rate (% of take‑home)", 0.0, 100.0, 20.0) / 100
+        st.caption("Minimum savings rate today.")
+
+        max_save = st.slider("Max Savings Rate (%)", int(base_save * 100), 100) / 100
+        st.caption("Upper‑limit savings rate once income is high.")
+
+        elasticity = st.slider(
+            "Savings Elasticity (rate ramp speed)",
+            0.1,
+            3.0,
+            1.0,
+            0.1,
+        )
+        st.caption(
+            "**Savings elasticity** controls how fast your savings‑rate glide path rises from the *base* toward the *max* as your income grows."\
+            "
+‣ **0.3 – Slow burner:** You intentionally let lifestyle creep; you won’t hit half of max savings until pay is ~90 % higher."\
+            "
+‣ **1.0 – Balanced (default):** Savings pick up steadily; halfway to max after roughly a 40 % pay bump."\
+            "
+‣ **2.0 – Turbo:** You ramp savings quickly; halfway mark once income is just 20 % above today."\
+            "
+Choose a smaller value if you expect expenses to rise with income (e.g., young family, lifestyle upgrades). Choose a larger value if you plan to funnel most raises into savings."
+        )
+        st.caption("How quickly savings rate ramps. 0.5 = gentle, 2 = aggressive.")
+
+        st.header("Employer & Returns")
+        employer_match_rate = st.slider("Employer Match (%)", 0.0, 100.0, 0.0) / 100
+        employer_match_cap = st.slider("Match Cap (% of income)", 0.0, 100.0, 0.0) / 100
+        expected_return = st.slider("Expected Annual Return (%)", -5.0, 15.0, 7.0) / 100
 
         st.header("Taxes & Inflation")
-        income_tax_rate = st.slider("Marginal Income Tax Rate (%)", 0.0, 50.0, 30.0) / 100
-        capital_gains_tax_rate = st.slider("Capital Gains Tax Rate (%)", 0.0, 40.0, 20.0) / 100
-        inflation_rate = st.slider("Inflation Rate (%)", 0.0, 10.0, 3.0) / 100
+        income_tax = st.slider("Marginal Income Tax (%)", 0.0, 50.0, 30.0) / 100
+        cg_tax = st.slider("Capital‑Gains Tax (%)", 0.0, 40.0, 20.0) / 100
+        inflation = st.slider("Inflation (%)", 0.0, 10.0, 3.0) / 100
 
         st.markdown("---")
         st.subheader("Retirement Goal")
-        desired_annual_retirement_spending = st.number_input(
-            "Desired Annual Spending in Retirement ($, today's dollars)",
-            10000.0,
-            step=1000.0,
-            format="%.0f",
-            value=60000.0,
-        )
-        withdrawal_rate = st.slider("Withdrawal Rate (%)", 2.0, 10.0, 4.0) / 100
+        spend_goal = st.number_input("Desired Annual Spending (today $)", 10000.0, step=1000.0, format="%.0f", value=60000.0)
+        withdrawal = st.slider("Withdrawal Rate (%)", 2.0, 10.0, 4.0) / 100
 
-    # ----- BUILD PROJECTION -----
+    # build params
     params = FinancialInputs(
         current_age=current_age,
         current_net_worth=current_net_worth,
-        current_gross_income=current_gross_income,
-        annual_income_growth_rate=annual_income_growth_rate,
-        savings_rate=savings_rate,
+        current_gross_income=current_income,
+        annual_income_growth_rate=income_growth,
+        base_savings_rate=base_save,
+        max_savings_rate=max_save,
+        savings_elasticity=elasticity,
         employer_match_rate=employer_match_rate,
         employer_match_cap=employer_match_cap,
-        expected_annual_return_rate=expected_annual_return_rate,
-        income_tax_rate=income_tax_rate,
-        capital_gains_tax_rate=capital_gains_tax_rate,
-        inflation_rate=inflation_rate,
-        desired_annual_retirement_spending=desired_annual_retirement_spending,
-        withdrawal_rate=withdrawal_rate,
+        expected_annual_return_rate=expected_return,
+        income_tax_rate=income_tax,
+        capital_gains_tax_rate=cg_tax,
+        inflation_rate=inflation,
+        desired_annual_retirement_spending=spend_goal,
+        withdrawal_rate=withdrawal,
     )
 
     projection, details = build_projection(params)
 
-    # ----- SUMMARY -----
+    # ----- summary -----
     st.subheader("Retirement Snapshot")
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Annual Spending Goal (today $)", f"${desired_annual_retirement_spending:,.0f}")
-    col2.metric("Withdrawal Rate", f"{withdrawal_rate*100:.1f}%")
+    col1.metric("Spending Goal (today $)", f"${spend_goal:,.0f}")
+    col2.metric("Withdrawal Rate", f"{withdrawal*100:.1f}%")
     col3.metric("Required Portfolio ($)", f"${details['required_capital']:,.0f}")
-    col4.metric("Age Reached", details["age"] or "Not reached")
+    col4.metric("Age Reached", details['age'] or "Not reached")
 
     if details["age"] is not None:
         st.info(
-            f"At age **{details['age']}**, portfolio target is **\\${details['required_capital']:,.0f}**, supporting about **\\${details['spending_nominal']:,.0f}** of spending in that year's dollars."
+            f"At age **{details['age']}**, portfolio target is **\${details['required_capital']:,.0f}**, providing **\${details['spending_nominal']:,.0f}** per year in that year's dollars."
         )
 
-    # ----- CHARTS & TABLE -----
+    # ----- charts -----
+    st.subheader("Income Growth vs Age")
+    st.line_chart(projection.set_index("Age")["Gross Income"], height=300)
+
     st.subheader("Net Worth Projection")
-    st.line_chart(
-        projection.set_index("Age")["Net Worth"],
-        height=400,
-    )
+    st.line_chart(projection.set_index("Age")["Net Worth"], height=300)
 
     st.subheader("Contributions vs Investment Gains")
     st.area_chart(
-        projection.set_index("Age")[["Annual Contributions", "Investment Gains"]],
-        height=400,
+        projection.set_index("Age")[["Annual Contributions", "Investment Gains"]], height=300
     )
 
-    st.subheader("Data Table (rounded)")
-    display_df = projection.copy()
-    for col in ["Net Worth", "Annual Contributions", "Investment Gains"]:
-        display_df[col] = display_df[col].round(0).apply(lambda x: f"{x:,.0f}")
-    st.dataframe(display_df, use_container_width=True)
+    # ----- detailed table -----
+    st.subheader("Detailed Projection (rounded)")
+    rounded = projection.copy()
+    for col in ["Gross Income", "Annual Contributions", "Net Worth", "Investment Gains"]:
+        rounded[col] = rounded[col].round(0).apply(lambda x: f"{x:,.0f}")
+    rounded["Effective Savings Rate"] = (
+        rounded["Effective Savings Rate"] * 100
+    ).round(1).apply(lambda x: f"{x}%")
 
+    st.dataframe(rounded.set_index("Age"), use_container_width=True)
+
+
+# ---------- run ----------
 
 if __name__ == "__main__":
     app()
