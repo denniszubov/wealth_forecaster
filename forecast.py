@@ -478,7 +478,7 @@ def app():
 
     if details["age"] is not None:
         st.info(
-            f"At age **{details['age']}**, portfolio target is **{markdown_symbol}{details['required_capital']:,.0f}**, providing **{markdown_symbol}{details['spending_nominal']:,.0f}** per year in that year's currency."
+            f"You will reach your retirement number of **{markdown_symbol}{details['required_capital']:,.0f}** at age **{details['age']}**. This would provide you with **{markdown_symbol}{details['spending_nominal']:,.0f}** per year (**{markdown_symbol}{spend_goal:,.0f}** inflation-adjusted) at a withdrawal rate of **{withdrawal * 100:.1f}%**."
         )
 
     # Charts
