@@ -18,6 +18,7 @@ MAX_AGE = 120  # simulation horizon if goal never reached
 @dataclass(slots=True, frozen=True)
 class CurrencySettings:
     """Currency-specific financial settings and defaults"""
+
     label: str
     symbol: str
     markdown_symbol: str
@@ -33,6 +34,7 @@ class CurrencySettings:
 @dataclass(slots=True, frozen=True)
 class CareerPhase:
     """Represents a phase in a person's career with specific income-growth characteristics"""
+
     start_age: int
     end_age: int
     growth_rate: float
@@ -161,7 +163,9 @@ def build_projection(params: FinancialInputs):
     income_base = income
 
     net_worth = params.current_net_worth
-    after_tax_return = params.expected_annual_return_rate * (1 - params.capital_gains_tax_rate)
+    after_tax_return = params.expected_annual_return_rate * (
+        1 - params.capital_gains_tax_rate
+    )
     after_tax_mult = 1 - params.income_tax_rate  # loop-invariant
 
     cumulative_contributions = 0.0
@@ -174,7 +178,10 @@ def build_projection(params: FinancialInputs):
 
     while age <= MAX_AGE:
         years_from_start = age - params.current_age
-        spending_nominal = params.desired_annual_retirement_spending * (1 + params.inflation_rate) ** years_from_start
+        spending_nominal = (
+            params.desired_annual_retirement_spending
+            * (1 + params.inflation_rate) ** years_from_start
+        )
         required_capital = spending_nominal / params.withdrawal_rate
 
         # record current year
@@ -196,7 +203,11 @@ def build_projection(params: FinancialInputs):
         )
 
         if net_worth >= required_capital and target_age is None:
-            target_age, target_capital, target_spending_nominal = age, required_capital, spending_nominal
+            target_age, target_capital, target_spending_nominal = (
+                age,
+                required_capital,
+                spending_nominal,
+            )
             break
 
         # advance to next year
@@ -205,11 +216,7 @@ def build_projection(params: FinancialInputs):
             break
 
         current_phase = next(
-            (
-                p
-                for p in params.career_phases
-                if p.start_age <= age <= p.end_age
-            ),
+            (p for p in params.career_phases if p.start_age <= age <= p.end_age),
             CareerPhase(age, age, 0.0, "No phase defined"),
         )
         income *= 1 + current_phase.growth_rate
@@ -228,7 +235,10 @@ def build_projection(params: FinancialInputs):
 
         after_tax_income = income * after_tax_mult
         eligible_match_base = min(params.employer_match_cap, save_rate) * income
-        annual_contribution = save_rate * after_tax_income + params.employer_match_rate * eligible_match_base
+        annual_contribution = (
+            save_rate * after_tax_income
+            + params.employer_match_rate * eligible_match_base
+        )
 
         net_worth *= 1 + after_tax_return
         net_worth += annual_contribution
@@ -320,18 +330,29 @@ def app():
             st.write("Define growth rates for career phases:")
             col1, col2 = st.columns(2)
             with col1:
-                early_career_growth = st.slider("Early Career Growth (%)", 0.0, 20.0, 7.0) / 100
-                mid_career_growth = st.slider("Mid Career Growth (%)", 0.0, 15.0, 4.0) / 100
-                late_career_growth = st.slider("Late Career Growth (%)", 0.0, 10.0, 2.0) / 100
+                early_career_growth = (
+                    st.slider("Early Career Growth (%)", 0.0, 20.0, 7.0) / 100
+                )
+                mid_career_growth = (
+                    st.slider("Mid Career Growth (%)", 0.0, 15.0, 4.0) / 100
+                )
+                late_career_growth = (
+                    st.slider("Late Career Growth (%)", 0.0, 10.0, 2.0) / 100
+                )
             with col2:
                 early_end = st.number_input(
-                    "Early Career Ends (age)", current_age + 1, 50, min(current_age + 10, 40)
+                    "Early Career Ends (age)",
+                    current_age + 1,
+                    50,
+                    min(current_age + 10, 40),
                 )
                 mid_end = st.number_input(
                     "Mid Career Ends (age)", early_end + 1, 70, min(early_end + 15, 60)
                 )
             career_phases = [
-                CareerPhase(current_age, early_end, early_career_growth, "Early Career"),
+                CareerPhase(
+                    current_age, early_end, early_career_growth, "Early Career"
+                ),
                 CareerPhase(early_end + 1, mid_end, mid_career_growth, "Mid Career"),
                 CareerPhase(mid_end + 1, MAX_AGE, late_career_growth, "Late Career"),
             ]
@@ -351,14 +372,24 @@ def app():
 
         st.header("Saving Behaviour")
         base_save = (
-            st.slider("Base Savings Rate (% of take-home)", 0.0, 100.0, DEFAULT_BASE_SAVINGS_RATE * 100) / 100
+            st.slider(
+                "Base Savings Rate (% of take-home)",
+                0.0,
+                100.0,
+                DEFAULT_BASE_SAVINGS_RATE * 100,
+            )
+            / 100
         )
         st.caption("Minimum savings rate today.")
 
         initial_max_save_value = max(DEFAULT_MAX_SAVINGS_RATE * 100, base_save * 100)
-        max_save = st.slider("Max Savings Rate (%)", 0.0, 100.0, initial_max_save_value) / 100
+        max_save = (
+            st.slider("Max Savings Rate (%)", 0.0, 100.0, initial_max_save_value) / 100
+        )
         if max_save < base_save:
-            st.warning("Max savings rate cannot be lower than base savings rate. Adjusting to match.")
+            st.warning(
+                "Max savings rate cannot be lower than base savings rate. Adjusting to match."
+            )
             max_save = base_save
         st.caption("Upper-limit savings rate once income is high.")
 
@@ -373,13 +404,20 @@ def app():
 
         st.header("Employer & Returns")
         employer_match_rate = (
-            st.slider("Employer Match (%)", 0.0, 100.0, DEFAULT_EMPLOYER_MATCH * 100) / 100
+            st.slider("Employer Match (%)", 0.0, 100.0, DEFAULT_EMPLOYER_MATCH * 100)
+            / 100
         )
         employer_match_cap = (
-            st.slider("Match Cap (% of income)", 0.0, 100.0, DEFAULT_EMPLOYER_MATCH_CAP * 100) / 100
+            st.slider(
+                "Match Cap (% of income)", 0.0, 100.0, DEFAULT_EMPLOYER_MATCH_CAP * 100
+            )
+            / 100
         )
         expected_return = (
-            st.slider("Expected Annual Return (%)", -5.0, 15.0, DEFAULT_ANNUAL_RETURN * 100) / 100
+            st.slider(
+                "Expected Annual Return (%)", -5.0, 15.0, DEFAULT_ANNUAL_RETURN * 100
+            )
+            / 100
         )
 
         st.header("Taxes & Inflation")
@@ -387,11 +425,10 @@ def app():
             st.slider("Marginal Income Tax (%)", 0.0, 50.0, cur.income_tax * 100) / 100
         )
         cg_tax = (
-            st.slider("Capital-Gains Tax (%)", 0.0, 40.0, cur.capital_gains_tax * 100) / 100
+            st.slider("Capital-Gains Tax (%)", 0.0, 40.0, cur.capital_gains_tax * 100)
+            / 100
         )
-        inflation = (
-            st.slider("Inflation (%)", 0.0, 10.0, cur.inflation * 100) / 100
-        )
+        inflation = st.slider("Inflation (%)", 0.0, 10.0, cur.inflation * 100) / 100
 
         st.markdown("---")
         st.subheader("Retirement Goal")
@@ -403,7 +440,8 @@ def app():
             value=cur.spending_goal,
         )
         withdrawal = (
-            st.slider("Withdrawal Rate (%)", 2.0, 10.0, DEFAULT_WITHDRAWAL_RATE * 100) / 100
+            st.slider("Withdrawal Rate (%)", 2.0, 10.0, DEFAULT_WITHDRAWAL_RATE * 100)
+            / 100
         )
 
     # Build parameters
@@ -475,11 +513,16 @@ def app():
     st.line_chart(projection.set_index("Age")["Net Worth"], height=300)
 
     st.subheader("Contributions vs Investment Gains")
-    chart_data = projection.set_index("Age")[["Annual Contributions", "Investment Gains"]]
+    chart_data = projection.set_index("Age")[
+        ["Annual Contributions", "Investment Gains"]
+    ]
     st.area_chart(
-        chart_data, 
+        chart_data,
         height=300,
-        color=["#ff9933", "#3366ff"]  # Orange for contributions, blue for investment gains
+        color=[
+            "#ff9933",
+            "#3366ff",
+        ],  # Orange for contributions, blue for investment gains
     )
 
     # Detailed Table
@@ -487,24 +530,16 @@ def app():
     rounded = projection.copy()
 
     fmt_cols = ["Gross Income", "Annual Contributions", "Net Worth", "Investment Gains"]
-    
+
     # Format each column individually
     for col in fmt_cols:
-        rounded[col] = (
-            symbol
-            + rounded[col]
-            .round(0)
-            .astype(int)
-            .astype(str)
-            .str.replace(r"(\d)(?=(\d{3})+$)", r"\1,", regex=True)
-        )
-    
-    rounded["Effective Savings Rate"] = (
-        (rounded["Effective Savings Rate"] * 100)
-        .round(1)
-        .astype(str)
-        + "%"
-    )
+        rounded[col] = symbol + rounded[col].round(0).astype(int).astype(
+            str
+        ).str.replace(r"(\d)(?=(\d{3})+$)", r"\1,", regex=True)
+
+    rounded["Effective Savings Rate"] = (rounded["Effective Savings Rate"] * 100).round(
+        1
+    ).astype(str) + "%"
 
     st.dataframe(rounded.set_index("Age"), use_container_width=True)
 
