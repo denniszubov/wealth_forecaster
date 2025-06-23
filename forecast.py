@@ -444,19 +444,6 @@ def app():
         )
         inflation = st.slider("Inflation (%)", 0.0, 10.0, cur.inflation * 100) / 100
 
-        st.markdown("---")
-        st.subheader("Retirement Goal")
-        spend_goal = st.number_input(
-            f"Desired Annual Spending (today {symbol})",
-            10_000.0,
-            step=1_000.0,
-            format=CURRENCY_FORMAT,
-            value=cur.spending_goal,
-        )
-        withdrawal = (
-            st.slider("Withdrawal Rate (%)", 2.0, 10.0, DEFAULT_WITHDRAWAL_RATE * 100)
-            / 100
-        )
 
     # Build parameters
     params = FinancialInputs(
