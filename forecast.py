@@ -162,7 +162,7 @@ def app():
 
     if details["age"] is not None:
         st.info(
-            f"At age **{details['age']}**, portfolio target is **${details['required_capital']:,.0f}**, supporting about **${details['spending_nominal']:,.0f}** of spending in that year's dollars."
+            f"At age **{details['age']}**, portfolio target is **\\${details['required_capital']:,.0f}**, supporting about **\\${details['spending_nominal']:,.0f}** of spending in that year's dollars."
         )
 
     # ----- CHARTS & TABLE -----
