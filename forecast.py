@@ -1,15 +1,21 @@
 import math
 from dataclasses import dataclass
+from typing import Tuple
 
 import pandas as pd
 import streamlit as st
+
 
 # ----------------------------
 # Constants & Default Settings
 # ----------------------------
 MAX_AGE = 120  # simulation horizon if goal never reached
 
-@dataclass
+
+# ----------------------------
+# Dataclasses (now hashable & lighter)
+# ----------------------------
+@dataclass(slots=True, frozen=True)
 class CurrencySettings:
     """Currency-specific financial settings and defaults"""
     label: str
@@ -23,6 +29,52 @@ class CurrencySettings:
     income_tax: float
     capital_gains_tax: float
 
+
+@dataclass(slots=True, frozen=True)
+class CareerPhase:
+    """Represents a phase in a person's career with specific income-growth characteristics"""
+    start_age: int
+    end_age: int
+    growth_rate: float
+    description: str = ""
+
+
+@dataclass(slots=True, frozen=True)
+class FinancialInputs:
+    # Core profile
+    current_age: int
+    current_net_worth: float
+    current_gross_income: float
+
+    # Growth & saving dynamics
+    base_savings_rate: float
+    max_savings_rate: float
+    savings_elasticity: float
+
+    # Employer + market
+    employer_match_rate: float
+    employer_match_cap: float
+    expected_annual_return_rate: float
+
+    # Taxes & inflation
+    income_tax_rate: float
+    capital_gains_tax_rate: float
+    inflation_rate: float
+
+    # Retirement target
+    desired_annual_retirement_spending: float
+    withdrawal_rate: float
+
+    # Growth model
+    career_phases: Tuple[CareerPhase, ...]
+
+    # Optional – income ceiling
+    income_ceiling: float = float("inf")
+
+
+# ----------------------------
+# Currency Settings
+# ----------------------------
 CURRENCY_SETTINGS = {
     "USD": CurrencySettings(
         label="USD (United States)",
@@ -30,34 +82,34 @@ CURRENCY_SETTINGS = {
         markdown_symbol="\\$",
         net_worth=0.0,
         income=60_000.0,
-        income_growth=0.03,  # 3 %
-        inflation=0.03,  # 3 %
+        income_growth=0.03,
+        inflation=0.03,
         spending_goal=60_000.0,
-        income_tax=0.35,  # 35 %
-        capital_gains_tax=0.20,  # 20 %
+        income_tax=0.35,
+        capital_gains_tax=0.20,
     ),
     "ZAR": CurrencySettings(
         label="ZAR (South Africa)",
         symbol="R",
         markdown_symbol="R",
         net_worth=0.0,
-        income=320_000.0,  # ≈ R26 600 / month
-        income_growth=0.04,  # 4 %
-        inflation=0.05,  # 5 %
+        income=320_000.0,
+        income_growth=0.04,
+        inflation=0.05,
         spending_goal=300_000.0,
-        income_tax=0.30,  # 30 %
-        capital_gains_tax=0.18,  # ≈ 40 % inclusion × 45 % bracket
+        income_tax=0.30,
+        capital_gains_tax=0.18,
     ),
 }
 
 # The remaining parameters seldom change by country, so we keep single defaults
-DEFAULT_BASE_SAVINGS_RATE = 0.20  # 20 %
-DEFAULT_MAX_SAVINGS_RATE = 0.50  # 50 %
+DEFAULT_BASE_SAVINGS_RATE = 0.20
+DEFAULT_MAX_SAVINGS_RATE = 0.50
 DEFAULT_SAVINGS_ELASTICITY = 1.0
-DEFAULT_EMPLOYER_MATCH = 0.0  # 0 %
-DEFAULT_EMPLOYER_MATCH_CAP = 0.0  # 0 %
-DEFAULT_ANNUAL_RETURN = 0.09  # 9 %
-DEFAULT_WITHDRAWAL_RATE = 0.04  # 4 %
+DEFAULT_EMPLOYER_MATCH = 0.0
+DEFAULT_EMPLOYER_MATCH_CAP = 0.0
+DEFAULT_ANNUAL_RETURN = 0.09
+DEFAULT_WITHDRAWAL_RATE = 0.04
 
 # UI formatting helpers
 PERCENTAGE_FORMAT = "%.1f"
@@ -83,55 +135,8 @@ ELASTICITY_DESCRIPTION = (
 
 
 # ----------------------------
-# Dataclasses
-# ----------------------------
-@dataclass
-class CareerPhase:
-    """Represents a phase in a person's career with specific income growth characteristics"""
-
-    start_age: int
-    end_age: int
-    growth_rate: float
-    description: str = ""
-
-
-@dataclass
-class FinancialInputs:
-    # Core profile
-    current_age: int
-    current_net_worth: float
-    current_gross_income: float
-
-    # Growth & saving dynamics
-    base_savings_rate: float
-    max_savings_rate: float
-    savings_elasticity: float  # how quickly savings ramps toward max
-
-    # Employer + market
-    employer_match_rate: float
-    employer_match_cap: float
-    expected_annual_return_rate: float
-
-    # Taxes & inflation
-    income_tax_rate: float
-    capital_gains_tax_rate: float
-    inflation_rate: float
-
-    # Retirement target
-    desired_annual_retirement_spending: float  # today‑currency spending goal
-    withdrawal_rate: float  # safe‑withdrawal %
-
-    # Growth model
-    career_phases: list[CareerPhase]
-
-    # Optional – income ceiling
-    income_ceiling: float = float("inf")
-
-
-# ----------------------------
 # Helper Functions
 # ----------------------------
-
 def effective_savings_rate(
     base: float,
     max_rate: float,
@@ -140,7 +145,7 @@ def effective_savings_rate(
     income_base: float,
 ) -> float:
     """Smoothly increase savings rate toward max as income rises."""
-    growth_factor = (income_now / income_base) - 1  # 0 when income == base
+    growth_factor = (income_now / income_base) - 1
     rate = base + (max_rate - base) * (1 - math.exp(-elasticity * growth_factor))
     return min(rate, max_rate)
 
@@ -148,20 +153,20 @@ def effective_savings_rate(
 # ----------------------------
 # Projection Engine
 # ----------------------------
-
 def build_projection(params: FinancialInputs):
-    rows: list[list[float]] = []
+    rows = []
 
     age = params.current_age
     income = params.current_gross_income
-    income_base = income  # reference point for savings‑rate ramp
+    income_base = income
 
     net_worth = params.current_net_worth
     after_tax_return = params.expected_annual_return_rate * (1 - params.capital_gains_tax_rate)
+    after_tax_mult = 1 - params.income_tax_rate  # loop-invariant
 
     cumulative_contributions = 0.0
     initial_net_worth = net_worth
-    annual_contribution = 0.0  # first‑year placeholder
+    annual_contribution = 0.0
 
     target_age = None
     target_capital = None
@@ -172,7 +177,7 @@ def build_projection(params: FinancialInputs):
         spending_nominal = params.desired_annual_retirement_spending * (1 + params.inflation_rate) ** years_from_start
         required_capital = spending_nominal / params.withdrawal_rate
 
-        # --- record current year ---
+        # record current year
         rows.append(
             [
                 age,
@@ -190,17 +195,15 @@ def build_projection(params: FinancialInputs):
             ]
         )
 
-        # Check if goal hit after updating previous year
         if net_worth >= required_capital and target_age is None:
             target_age, target_capital, target_spending_nominal = age, required_capital, spending_nominal
             break
 
-        # --- advance to next year ---
+        # advance to next year
         age += 1
         if age > MAX_AGE:
             break
 
-        # Update income using phase‑based growth
         current_phase = next(
             (
                 p
@@ -211,12 +214,10 @@ def build_projection(params: FinancialInputs):
         )
         income *= 1 + current_phase.growth_rate
 
-        # Apply income ceiling
         if params.income_ceiling < float("inf"):
             proximity_factor = max(0.0, 1 - (income / params.income_ceiling))
             income = min(income, params.income_ceiling * (1 - 0.05 * proximity_factor))
 
-        # Dynamic savings rate
         save_rate = effective_savings_rate(
             params.base_savings_rate,
             params.max_savings_rate,
@@ -225,12 +226,10 @@ def build_projection(params: FinancialInputs):
             income_base,
         )
 
-        # Contributions
-        after_tax_income = income * (1 - params.income_tax_rate)
+        after_tax_income = income * after_tax_mult
         eligible_match_base = min(params.employer_match_cap, save_rate) * income
         annual_contribution = save_rate * after_tax_income + params.employer_match_rate * eligible_match_base
 
-        # Portfolio growth
         net_worth *= 1 + after_tax_return
         net_worth += annual_contribution
         cumulative_contributions += annual_contribution
@@ -244,14 +243,21 @@ def build_projection(params: FinancialInputs):
 
 
 # ----------------------------
+# Cache wrapper
+# ----------------------------
+@st.cache_data(show_spinner=False)
+def build_projection_cached(params: FinancialInputs):
+    return build_projection(params)
+
+
+# ----------------------------
 # Streamlit UI
 # ----------------------------
-
 def app():
     st.set_page_config(page_title="Wealth Forecast", layout="wide")
     st.title("Wealth Forecast")
 
-    # ----- currency selector -----
+    # currency selector
     with st.sidebar:
         st.header("Global Settings")
         currency_key = st.selectbox(
@@ -260,7 +266,6 @@ def app():
             index=0,
         )
 
-    # Resolve key back from the label
     currency_code = next(
         k for k, v in CURRENCY_SETTINGS.items() if v.label == currency_key
     )
@@ -268,7 +273,7 @@ def app():
     symbol = cur.symbol
     markdown_symbol = cur.markdown_symbol
 
-    # ----- sidebar inputs -----
+    # sidebar inputs
     with st.sidebar:
         st.markdown("---")
         st.header("Profile & Income")
@@ -346,7 +351,7 @@ def app():
 
         st.header("Saving Behaviour")
         base_save = (
-            st.slider("Base Savings Rate (% of take‑home)", 0.0, 100.0, DEFAULT_BASE_SAVINGS_RATE * 100) / 100
+            st.slider("Base Savings Rate (% of take-home)", 0.0, 100.0, DEFAULT_BASE_SAVINGS_RATE * 100) / 100
         )
         st.caption("Minimum savings rate today.")
 
@@ -355,7 +360,7 @@ def app():
         if max_save < base_save:
             st.warning("Max savings rate cannot be lower than base savings rate. Adjusting to match.")
             max_save = base_save
-        st.caption("Upper‑limit savings rate once income is high.")
+        st.caption("Upper-limit savings rate once income is high.")
 
         elasticity = st.slider(
             "Savings Elasticity (rate ramp speed)",
@@ -382,7 +387,7 @@ def app():
             st.slider("Marginal Income Tax (%)", 0.0, 50.0, cur.income_tax * 100) / 100
         )
         cg_tax = (
-            st.slider("Capital‑Gains Tax (%)", 0.0, 40.0, cur.capital_gains_tax * 100) / 100
+            st.slider("Capital-Gains Tax (%)", 0.0, 40.0, cur.capital_gains_tax * 100) / 100
         )
         inflation = (
             st.slider("Inflation (%)", 0.0, 10.0, cur.inflation * 100) / 100
@@ -417,11 +422,11 @@ def app():
         inflation_rate=inflation,
         desired_annual_retirement_spending=spend_goal,
         withdrawal_rate=withdrawal,
-        career_phases=career_phases,
+        career_phases=tuple(career_phases),
         income_ceiling=income_ceiling,
     )
 
-    projection, details = build_projection(params)
+    projection, details = build_projection_cached(params)
 
     # ----------------------------
     # Dashboard Output
@@ -477,16 +482,22 @@ def app():
     # Detailed Table
     st.subheader("Detailed Projection (rounded)")
     rounded = projection.copy()
-    for col in [
-        "Gross Income",
-        "Annual Contributions",
-        "Net Worth",
-        "Investment Gains",
-    ]:
-        rounded[col] = rounded[col].round(0).apply(lambda x: f"{symbol}{x:,.0f}")
+
+    fmt_cols = ["Gross Income", "Annual Contributions", "Net Worth", "Investment Gains"]
+    rounded[fmt_cols] = (
+        symbol
+        + rounded[fmt_cols]
+        .round(0)
+        .astype(int)
+        .astype(str)
+        .str.replace(r"(\d)(?=(\d{3})+$)", r"\1,", regex=True)
+    )
     rounded["Effective Savings Rate"] = (
-        rounded["Effective Savings Rate"] * 100
-    ).round(1).apply(lambda x: f"{x}%")
+        (rounded["Effective Savings Rate"] * 100)
+        .round(1)
+        .astype(str)
+        + "%"
+    )
 
     st.dataframe(rounded.set_index("Age"), use_container_width=True)
 
