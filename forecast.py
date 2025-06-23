@@ -286,6 +286,20 @@ def app():
     # sidebar inputs
     with st.sidebar:
         st.markdown("---")
+        st.header("Retirement Goal")
+        spend_goal = st.number_input(
+            f"Desired Annual Spending (today {symbol})",
+            10_000.0,
+            step=1_000.0,
+            format=CURRENCY_FORMAT,
+            value=cur.spending_goal,
+        )
+        withdrawal = (
+            st.slider("Withdrawal Rate (%)", 2.0, 10.0, DEFAULT_WITHDRAWAL_RATE * 100)
+            / 100
+        )
+
+        st.markdown("---")
         st.header("Profile & Income")
         current_age = st.number_input("Current Age", 18, 80, 30, step=1)
         st.caption("Your age today. Starting point for the simulation.")
@@ -478,7 +492,14 @@ def app():
 
     if details["age"] is not None:
         st.info(
-            f"You will reach your retirement number of **{markdown_symbol}{details['required_capital']:,.0f}** at age **{details['age']}**. This would provide you with **{markdown_symbol}{details['spending_nominal']:,.0f}** per year (**{markdown_symbol}{spend_goal:,.0f}** inflation-adjusted) at a withdrawal rate of **{withdrawal * 100:.1f}%**."
+            f"""
+            You will reach your retirement number of **{markdown_symbol}{details['required_capital']:,.0f}** 
+            at age **{details['age']}**. 
+            
+            This would provide you with **{markdown_symbol}{details['spending_nominal']:,.0f}** per year 
+            (**{markdown_symbol}{spend_goal:,.0f}** inflation-adjusted) at a withdrawal rate 
+            of **{withdrawal * 100:.1f}%**.
+            """
         )
 
     # Charts
