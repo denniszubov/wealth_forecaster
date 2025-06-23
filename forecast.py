@@ -285,7 +285,7 @@ def app():
         currency_key = st.selectbox(
             "Currency / Country",
             [CURRENCY_SETTINGS[k].label for k in CURRENCY_SETTINGS],
-            index=0,
+            index=1,
         )
 
     currency_code = next(
