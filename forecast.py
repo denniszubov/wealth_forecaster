@@ -176,15 +176,11 @@ def app():
             0.1,
         )
         st.caption(
-            "**Savings elasticity** controls how fast your savings‑rate glide path rises from the *base* toward the *max* as your income grows."\
-            "
-‣ **0.3 – Slow burner:** You intentionally let lifestyle creep; you won’t hit half of max savings until pay is ~90 % higher."\
-            "
-‣ **1.0 – Balanced (default):** Savings pick up steadily; halfway to max after roughly a 40 % pay bump."\
-            "
-‣ **2.0 – Turbo:** You ramp savings quickly; halfway mark once income is just 20 % above today."\
-            "
-Choose a smaller value if you expect expenses to rise with income (e.g., young family, lifestyle upgrades). Choose a larger value if you plan to funnel most raises into savings."
+            "**Savings elasticity** controls how fast your savings‑rate glide path rises from the *base* toward the *max* as your income grows."
+            "\n• **0.3 – Slow burner:** Halfway to max after ~90 % pay growth."
+            "\n• **1.0 – Balanced (default):** Halfway after ~40 % pay bump."
+            "\n• **2.0 – Turbo:** Halfway once income is ~20 % above today." 
+            "\nPick a smaller value if expenses rise with income; larger if raises go mostly to savings."
         )
         st.caption("How quickly savings rate ramps. 0.5 = gentle, 2 = aggressive.")
 
