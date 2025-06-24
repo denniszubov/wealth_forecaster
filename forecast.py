@@ -6,11 +6,7 @@ import pandas as pd
 import streamlit as st
 
 
-st.set_page_config(
-    page_title="Wealth Forecast",
-    page_icon="📈",
-    layout="wide"
-)
+st.set_page_config(page_title="Wealth Forecast", page_icon="📈", layout="wide")
 
 
 # ----------------------------
@@ -192,8 +188,6 @@ def build_projection(params: FinancialInputs):
     annual_contribution = 0.0
 
     target_age = None
-    target_capital = None
-    target_spending_nominal = None
 
     while age <= MAX_AGE:
         years_from_start = age - params.current_age
@@ -202,6 +196,10 @@ def build_projection(params: FinancialInputs):
             * (1 + params.inflation_rate) ** years_from_start
         )
         required_capital = spending_nominal / params.withdrawal_rate
+
+        # Always remember the most recent targets, even if we never reach them
+        target_capital = required_capital
+        target_spending_nominal = spending_nominal
 
         # record current year
         rows.append(
@@ -462,7 +460,6 @@ def app():
         )
         inflation = st.slider("Inflation (%)", 0.0, 10.0, cur.inflation * 100) / 100
 
-
     # Build parameters
     params = FinancialInputs(
         current_age=current_age,
@@ -488,23 +485,38 @@ def app():
     # ----------------------------
     # Dashboard Output
     # ----------------------------
+
+    # ----- Retirement Snapshot ---------------------------------------------------
     st.subheader("Retirement Snapshot")
     col1, col2, col3, col4 = st.columns(4)
+
     col1.metric("Spending Goal (today)", f"{symbol}{spend_goal:,.0f}")
     col2.metric("Withdrawal Rate", f"{withdrawal * 100:.1f}%")
-    col3.metric("Required Portfolio", f"{symbol}{details['required_capital']:,.0f}")
-    col4.metric("Age Reached", details["age"] or "Not reached")
 
-    if details["age"] is not None:
+    goal_reached = details["age"] is not None
+
+    if goal_reached:
+        col3.metric("Required Portfolio", f"{symbol}{details['required_capital']:,.0f}")
+        col4.metric("Age Reached", details["age"])
+    else:
+        col3.metric("Required Portfolio", f"{symbol}{details['required_capital']:,.0f}")
+        col4.metric("Age Reached", "Never")
+
+    if goal_reached:
         st.info(
-            f"""
-            You will reach your retirement number of **{markdown_symbol}{details['required_capital']:,.0f}** 
-            at age **{details['age']}**. 
-            
-            This would provide you with **{markdown_symbol}{details['spending_nominal']:,.0f}** per year 
-            (**{markdown_symbol}{spend_goal:,.0f}** inflation-adjusted) at a withdrawal rate 
-            of **{withdrawal * 100:.1f}%**.
-            """
+            f"You will reach your retirement number of "
+            f"**{markdown_symbol}{details['required_capital']:,.0f}** at age "
+            f"**{details['age']}**.\n\n"
+            f"This provides **{markdown_symbol}{details['spending_nominal']:,.0f}** "
+            f"per year (**{markdown_symbol}{spend_goal:,.0f}** in today's money) at a "
+            f"withdrawal rate of **{withdrawal * 100:.1f}%**.\n\n"
+            f"Inflation rate: **{inflation * 100:.1f}%** per year."
+        )
+    else:
+        st.warning(
+            "With the current inputs your portfolio never reaches the required capital. "
+            "Increase your savings rate, expected return, work longer, or reduce the "
+            "spending goal until the target becomes achievable."
         )
 
     # Charts
